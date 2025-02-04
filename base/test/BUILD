@@ -70,3 +70,14 @@ cc_test(
     args=["--benchmark_min_time=1x"],
     size = "small",
 )
+
+cc_test(
+    name = "ref_count_benchmark",
+    srcs = ["ref_count_benchmark.cc"],
+    deps = [
+        "//base:base",
+        "@google_benchmark//:benchmark_main",
+    ],
+    args=["--benchmark_min_time=1x"],
+    size = "small",
+)
