@@ -1,0 +1,70 @@
+#include "testing/base/public/gmock.h"
+#include "testing/base/public/gunit.h"
+#include "third_party/slinky/builder/pipeline.h"
+#include "third_party/slinky/builder/test/context.h"
+#include "third_party/slinky/builder/test/funcs.h"
+#include "third_party/slinky/runtime/expr.h"
+#include "third_party/slinky/runtime/pipeline.h"
+
+namespace slinky {
+
+index_t fake_reduce(const buffer<const float>& in, const buffer<float>& out) {
+  return 0;
+}
+
+namespace {
+
+TEST(pipeline, reproduce_make_buffer_bug) {
+  node_context ctx;
+
+  auto in = buffer_expr::make(ctx, "in", 2, sizeof(float));
+  auto out = buffer_expr::make(ctx, "out", 1, sizeof(float));
+
+  auto padded = buffer_expr::make(ctx, "padded", 2, sizeof(float));
+  auto stencil = buffer_expr::make(ctx, "stencil", 3, sizeof(float));
+
+  var x(ctx, "x");
+  var y(ctx, "y");
+  var k(ctx, "k");
+
+  func pad_func = func::make_copy(
+      {in, {point(x), point(y)}, in->bounds()}, {padded, {x, y}},
+      {buffer_expr::make_scalar<float>(ctx, "pad_val", 0.0f)});
+
+  func stencil_func = func::make_copy({padded, {point(x), point(y + k - 1)}},
+                                      {stencil, {x, y, k}});
+
+  // Reduce sum
+  func reduce_func =
+      func::make(fake_reduce, {{stencil, {point(x), point(y), bounds(0, 2)}}},
+                 {{out, {x}}}, call_stmt::attributes{});
+
+  pipeline p = build_pipeline(ctx, {in}, {out});
+
+  buffer<float, 2> in_buf({10, 10});
+  in_buf.allocate();
+  buffer<float, 1> out_buf({10});
+  out_buf.allocate();
+
+  const raw_buffer* inputs[] = {&in_buf};
+  const raw_buffer* outputs[] = {&out_buf};
+  test_context eval_ctx;
+
+  // Poison the evaluation context with misaligned addresses for the
+  // intermediate buffers. Because the `copy_aliaser` incorrectly hoists
+  // self-referencing metadata (like `buffer_bounds(stencil, ...)`) into the
+  // `dims` array of the outer `make_buffer` node, the evaluator attempts to
+  // look up `stencil` and `padded` BEFORE they are bound. This triggers the
+  // exact UBSan/ASan crash seen in the XLA logs.
+  eval_ctx[padded->sym()] = 0xf1f1f1f1f1f1f1f1;
+  eval_ctx[stencil->sym()] = 0xf1f1f1f1f1f1f1f1;
+
+  // Use EXPECT_DEATH to automatically pass the test when it successfully
+  // crashes. If you are trying to attach a debugger, you can replace this with
+  // simply: p.evaluate(inputs, outputs, eval_ctx);
+  p.evaluate(inputs, outputs, eval_ctx);
+}
+
+}  // namespace
+}  // namespace slinky
+
