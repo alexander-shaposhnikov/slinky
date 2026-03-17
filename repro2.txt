@@ -1,0 +1,179 @@
+shal1t7: comp = %fused_computation.1 (param_0.2: f32[], param_1.3: f32[3,16,7,7,2048]) -> f32[48,2048] {
+  %param_1.3 = f32[3,16,7,7,2048]{4,3,2,1,0} parameter(1)
+  %bitcast.1 = f32[48,49,2048]{2,1,0} bitcast(%param_1.3), metadata={op_name="XlaCallModule/jit(predict_fn_for_head)/DecoderHeadsExportWrapper/ClipFinetuneHead_2/attnpool/convert_element_type"}
+  %param_0.2 = f32[] parameter(0)
+  %reduce-window.0 = f32[48,2,2048]{2,1,0} reduce-window(%bitcast.1, %param_0.2), window={size=1x32x1 stride=1x32x1 pad=0_0x7_8x0_0}, to_apply=%region_16.17
+  ROOT %reduce_sum.0 = f32[48,2048]{1,0} reduce(%reduce-window.0, %param_0.2), dimensions={1}, to_apply=%region_16.17.clone, metadata={op_name="XlaCallModule/jit(predict_fn_for_head)/DecoderHeadsExportWrapper/ClipFinetuneHead_2/attnpool/reduce_sum"}
+}
+
+Warning in cpuinfo: kernel_max value of 8191 parsed from /sys/devices/system/cpu/kernel_max exceeds platform-default limit 1023
+subgraph before optimization:
+ (third_party/XNNPACK/ynnpack/subgraph/subgraph.cc:960)
+  value id rank   type zero_point_id scale_id
+---------- ---- ------ ------------- --------
+         0    0   fp32                        external_input extents={}
+         1    5   fp32                        external_input extents={2048,7,7,16,3,}
+         2    2   fp32                        external_output extents={2048,48,}
+         3    3   fp32                        extents={2048,49,48,}
+         4    3   fp32                        extents={2048,2,48,}
+         5    3   fp32                        extents={2048,((49 + 7) + 8),48,}
+         6    4   fp32                        extents={2048,32,2,48,}
+node inputs    outputs
+----------- ----------
+        {1}        {3} static_reshape new_dims={2048,49,48}
+      {3,0}        {5} static_pad paddings={{axis=1,pre_padding=7,post_padding=8}}
+       {5,}        {6} stencil_copy stencils={{axis=1,new_axis=1,extent=32,stride=32,dilation=1}}
+      {6,0}        {4} reduce op=reduce_sum axes={1}
+      {4,0}        {2} reduce op=reduce_sum axes={1}
+subgraph contains 7 values and 5 nodes.
+subgraph after optimization:
+ (third_party/XNNPACK/ynnpack/subgraph/subgraph.cc:972)
+  value id rank   type zero_point_id scale_id
+---------- ---- ------ ------------- --------
+         0    0   fp32                        external_input extents={}
+         1    5   fp32                        external_input extents={2048,7,7,16,3,}
+         2    2   fp32                        external_output extents={2048,48,}
+         3    3   fp32                        extents={2048,49,48,}
+         4    3   fp32                        extents={2048,2,48,}
+         5    3   fp32                        extents={2048,((49 + 7) + 8),48,}
+         6    4   fp32                        extents={2048,32,2,48,}
+node inputs    outputs
+----------- ----------
+        {1}        {3} static_reshape new_dims={2048,49,48}
+      {3,0}        {5} static_pad paddings={{axis=1,pre_padding=7,post_padding=8}}
+       {5,}        {6} stencil_copy stencils={{axis=1,new_axis=1,extent=32,stride=32,dilation=1}}
+      {6,0}        {4} reduce op=reduce_sum axes={1}
+      {4,0}        {2} reduce op=reduce_sum axes={1}
+subgraph contains 7 values and 5 nodes.
+
+check(in0)
+check((buffer_rank(in0) == 0))
+check(in1)
+check((buffer_rank(in1) == 5))
+check(out2)
+check((buffer_rank(out2) == 2))
+check((buffer_elem_size(in0) == 4))
+check((buffer_elem_size(in1) == 4))
+check((buffer_min(in1, 0) == 0))
+check((buffer_max(in1, 0) == 2047))
+check((buffer_stride(in1, 0) == 4))
+check((buffer_fold_factor(in1, 0) == -1))
+check((buffer_min(in1, 1) == 0))
+check((buffer_max(in1, 1) == 6))
+check((buffer_stride(in1, 1) == 8192))
+check((buffer_fold_factor(in1, 1) == -1))
+check((buffer_min(in1, 2) == 0))
+check((buffer_max(in1, 2) == 6))
+check((buffer_stride(in1, 2) == 57344))
+check((buffer_fold_factor(in1, 2) == -1))
+check((buffer_min(in1, 3) == 0))
+check((buffer_max(in1, 3) == 15))
+check((buffer_stride(in1, 3) == 401408))
+check((buffer_fold_factor(in1, 3) == -1))
+check((buffer_min(in1, 4) == 0))
+check((buffer_max(in1, 4) == 2))
+check((buffer_stride(in1, 4) == 6422528))
+check((buffer_fold_factor(in1, 4) == -1))
+check((buffer_elem_size(out2) == 4))
+check(or_else((buffer_min(out2, 0) == buffer_max(out2, 0)), (buffer_fold_factor(out2, 0) == -1)))
+check(or_else((buffer_fold_factor(out2, 0) <= 0), (buffer_max(out2, 0) < (buffer_fold_factor(out2, 0) + buffer_min(out2, 0)))))
+check(or_else((buffer_min(out2, 1) == buffer_max(out2, 1)), (buffer_fold_factor(out2, 1) == -1)))
+check(or_else((buffer_fold_factor(out2, 1) <= 0), (buffer_max(out2, 1) < (buffer_fold_factor(out2, 1) + buffer_min(out2, 1)))))
+v3/v5#1 = make_buffer(buffer_at(in1), buffer_elem_size(in1), {
+  {[buffer_min(out2, 0), buffer_max(out2, 0)], buffer_elem_size(v3), <>},
+  {[-7, 56], (buffer_elem_size(v3) * ((buffer_max(v3, 0) - buffer_min(v3, 0)) + 1)), <>},
+  {[buffer_min(out2, 1), buffer_max(out2, 1)], (((buffer_max(v3, 1) - buffer_min(v3, 1)) + 1) * (buffer_elem_size(v3) * ((buffer_max(v3, 0) - buffer_min(v3, 0)) + 1))), <>}
+}) {
+ v3 = crop_dim(v3/v5#1, 1, [0, 48]) {
+  check((buffer_size_bytes(in1) == buffer_size_bytes(v3)))
+  out2.d2 = loop(parallel, [buffer_min(out2, 1), buffer_max(out2, 1)], 16) {
+   closure {in0, out2, v3, out2.d2, v3/v5#1} in {
+    out2.out2.d2 = crop_dim(out2, 1, [out2.d2, (out2.d2 + 15)]) {
+     v5.out2.d2#1 = make_buffer(buffer_at(v3/v5#1, <>, <>, out2.d2), buffer_elem_size(v3/v5#1), {
+       {[buffer_min(v3/v5#1, 0), buffer_max(v3/v5#1, 0)], buffer_stride(v3/v5#1, 0), buffer_fold_factor(v3/v5#1, 0)},
+       {[0, 63], buffer_stride(v3, 1), buffer_fold_factor(v3/v5#1, 1)},
+       {[out2.d2, buffer_max(out2.out2.d2, 1)], buffer_stride(v3, 2), buffer_fold_factor(v3/v5#1, 2)}
+     }) {
+      v3.out2.d2#1 = make_buffer(buffer_at(v3, buffer_min(out2, 0), <>, buffer_min(out2, 1)), buffer_elem_size(v3), {
+        {[buffer_min(v3, 0), buffer_max(v3, 0)], buffer_stride(v3, 0), buffer_fold_factor(v3, 0)},
+        {[7, 55], buffer_stride(v3, 1), buffer_fold_factor(v3/v5#1, 1)},
+        {[buffer_min(v3, 2), buffer_max(v3, 2)], buffer_stride(v3, 2), buffer_fold_factor(v3, 2)}
+      }) {
+       call(copy, {}, {v3.out2.d2#1, v5.out2.d2#1, in0}, {})
+      }
+      v4 = allocate(automatic, 4, {
+        {[buffer_min(out2, 0), buffer_max(out2, 0)], <>, <>},
+        {[0, 1], <>, <>},
+        {[out2.d2, buffer_max(out2.out2.d2, 1)], <>, <>}
+      }) {
+       v6.out2.d2#1 = make_buffer(buffer_at(v5.out2.d2#1, buffer_min(out2, 0), <>, out2.d2), buffer_elem_size(v5.out2.d2#1), {
+         {[buffer_min(v5.out2.d2#1, 0), buffer_max(v5.out2.d2#1, 0)], buffer_stride(v5.out2.d2#1, 0), buffer_fold_factor(v5.out2.d2#1, 0)},
+         {[0, 31], buffer_stride(v3, 1), buffer_fold_factor(v3/v5#1, 1)},
+         {[0, 1], (buffer_stride(v3, 1) * 32), buffer_fold_factor(v3/v5#1, 1)},
+         {[buffer_min(v5.out2.d2#1, 2), buffer_max(v5.out2.d2#1, 2)], buffer_stride(v5.out2.d2#1, 2), buffer_fold_factor(v5.out2.d2#1, 2)}
+       }) {
+        call(reduce op=reduce_sum axes={1}, {v6.out2.d2#1, in0}, {v4}, {})
+       }
+       call(reduce op=reduce_sum axes={1}, {v4, in0}, {out2.out2.d2}, {})
+      }
+     }
+    }
+   }
+  }
+ }
+}
+third_party/slinky/runtime/evaluate.cc:147:47: runtime error: member access within misaligned address 0x5c5c5c5c5c5c5c5c for type 'const raw_buffer', which requires 16 byte alignment
+0x5c5c5c5c5c5c5c5c: note: pointer points here
+<memory cannot be printed>
+    #0 0x556932a1aaa2 in slinky::(anonymous namespace)::evaluator::eval(slinky::variable const*) third_party/slinky/runtime/evaluate.cc
+    #1 0x556932a201b6 in eval third_party/slinky/runtime/evaluate.cc:77:43
+    #2 0x556932a201b6 in slinky::(anonymous namespace)::evaluator::eval(slinky::make_buffer const*) third_party/slinky/runtime/evaluate.cc:636:24
+    #3 0x556932a1dec0 in slinky::(anonymous namespace)::evaluator::eval_non_inlined(slinky::stmt const&) third_party/slinky/runtime/evaluate.cc:369:46
+    #4 0x556932a1dc9a in eval third_party/slinky/runtime/evaluate.cc:349:21
+    #5 0x556932a1dc9a in eval third_party/slinky/runtime/evaluate.cc:407:24
+    #6 0x556932a1dc9a in slinky::(anonymous namespace)::evaluator::eval_non_inlined(slinky::stmt const&) third_party/slinky/runtime/evaluate.cc:366:40
+    #7 0x556932a1a68e in eval third_party/slinky/runtime/evaluate.cc:349:21
+    #8 0x556932a1a68e in slinky::evaluate(slinky::stmt const&, slinky::eval_context&) third_party/slinky/runtime/evaluate.cc:870:15
+    #9 0x556932a3729c in slinky::pipeline::evaluate(slinky::eval_context&) const third_party/slinky/runtime/pipeline.cc:28:62
+    #10 0x5569325cac52 in invoke third_party/XNNPACK/ynnpack/subgraph/runtime.cc:719:19
+    #11 0x5569325cac52 in ynn_invoke_runtime third_party/XNNPACK/ynnpack/subgraph/runtime.cc:749:19
+    #12 0x55692be699fc in xla::cpu::YnnFusionThunk::YnnExecutable::Invoke(std::__u::unique_ptr<ynn_threadpool, xla::cpu::internal::YnnDeleter> const&, absl::Span<stream_executor::DeviceAddressBase>, absl::Span<stream_executor::DeviceAddressBase>, absl::FunctionRef<bool (unsigned long)>) third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/ynn_fusion_thunk.cc:122:23
+    #13 0x55692be6e8dd in xla::cpu::YnnFusionThunk::Execute(xla::cpu::Thunk::ExecuteParams const&)::$_0::operator()(xla::ObjectPool<xla::cpu::YnnFusionThunk::YnnExecutable, std::__u::unique_ptr<ynn_threadpool, xla::cpu::internal::YnnDeleter> const&, absl::Span<stream_executor::DeviceAddressBase const>>::BorrowedObject) const third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/ynn_fusion_thunk.cc:337:33
+    #14 0x55692be6d9e4 in xla::cpu::YnnFusionThunk::Execute(xla::cpu::Thunk::ExecuteParams const&) third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/ynn_fusion_thunk.cc
+    #15 0x55693252b377 in xla::cpu::ThunkExecutor::TracedExecute(xla::cpu::Thunk&, xla::cpu::Thunk::ExecuteParams const&) third_party/tensorflow/compiler/xla/backends/cpu/runtime/thunk_executor.cc:224:18
+    #16 0x55693252bdc5 in xla::cpu::ThunkExecutor::Execute(xla::cpu::Thunk::ExecuteParams const&) third_party/tensorflow/compiler/xla/backends/cpu/runtime/thunk_executor.cc:255:12
+    #17 0x556928bf0ce2 in xla::CpuPjRtRawLoadedExecutable::Execute(xla::ExecuteOptions const&, absl::Span<tsl::RCReference<xla::CommonPjRtRawBuffer> const>, absl::Span<tsl::RCReference<xla::CommonPjRtRawBuffer> const>, std::__u::unique_ptr<xla::PjRtDeviceEventSet, std::__u::default_delete<xla::PjRtDeviceEventSet>>, std::__u::unique_ptr<xla::PjRtDeviceEventSet, std::__u::default_delete<xla::PjRtDeviceEventSet>>, bool, bool) &&::$_1::operator()() const third_party/tensorflow/compiler/xla/pjrt/cpu/cpu_client.cc:1688:34
+    #18 0x556928bee03d in xla::CpuPjRtRawLoadedExecutable::Execute(xla::ExecuteOptions const&, absl::Span<tsl::RCReference<xla::CommonPjRtRawBuffer> const>, absl::Span<tsl::RCReference<xla::CommonPjRtRawBuffer> const>, std::__u::unique_ptr<xla::PjRtDeviceEventSet, std::__u::default_delete<xla::PjRtDeviceEventSet>>, std::__u::unique_ptr<xla::PjRtDeviceEventSet, std::__u::default_delete<xla::PjRtDeviceEventSet>>, bool, bool) && third_party/tensorflow/compiler/xla/pjrt/cpu/cpu_client.cc:1705:33
+    #19 0x556928c454d7 in xla::CommonPjRtLoadedExecutable::ExecuteLaunch(xla::CommonPjRtLoadedExecutable::ExecuteLaunchArgs&, bool) const third_party/tensorflow/compiler/xla/pjrt/common_pjrt_client.cc:1041:23
+    #20 0x556928c462db in xla::CommonPjRtLoadedExecutable::ExecuteHelperOnSingleDevice(absl::Span<xla::PjRtBuffer* const>, xla::RunId, int, int, xla::ExecuteOptions const&, bool, xla::PjRtDevice*) const third_party/tensorflow/compiler/xla/pjrt/common_pjrt_client.cc:1122:10
+    #21 0x556928c466e6 in xla::CommonPjRtLoadedExecutable::ExecuteSharded(absl::Span<xla::PjRtBuffer* const>, xla::PjRtDevice*, xla::ExecuteOptions const&, std::__u::optional<tsl::Future<void>>&, bool) const third_party/tensorflow/compiler/xla/pjrt/common_pjrt_client.cc:1137:27
+    #22 0x556928bf3df7 in xla::PjRtCpuLoadedExecutable::ExecuteSharded(absl::Span<xla::PjRtBuffer* const>, xla::PjRtDevice*, xla::ExecuteOptions const&, std::__u::optional<tsl::Future<void>>&, bool) const third_party/tensorflow/compiler/xla/pjrt/cpu/cpu_client.cc:1916:38
+    #23 0x556928b36c2b in ExecuteSharded third_party/tensorflow/compiler/xla/pjrt/pjrt_client.h:1471:12
+    #24 0x556928b36c2b in xla::cpu::RunHloBenchmarkImpl(benchmark::State*, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&)::$_0::operator()() const third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:260:17
+    #25 0x556928b35dd4 in xla::cpu::RunHloBenchmarkImpl(benchmark::State*, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:298:19
+    #26 0x556928b346d8 in xla::cpu::RunHloBenchmark(benchmark::State&, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:314:10
+    #27 0x5569278a1a0e in xla::cpu::(anonymous namespace)::RunBenchmark(benchmark::State*, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:90:12
+    #28 0x5569278a1df8 in xla::cpu::(anonymous namespace)::BM_HloModule(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:98:12
+    #29 0x5569278ac447 in operator() third_party/benchmark/include/benchmark/benchmark.h:1458:41
+    #30 0x5569278ac447 in benchmark::internal::LambdaBenchmark<benchmark::Benchmark* benchmark::RegisterBenchmark<void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&>(std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&)::'lambda'(benchmark::State&)>::Run(benchmark::State&) third_party/benchmark/include/benchmark/benchmark.h:1426:34
+    #31 0x5569381729e5 in benchmark::internal::BenchmarkInstance::Run(long, int, benchmark::internal::ThreadTimer*, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) const third_party/benchmark/src/benchmark_api_internal.cc:99:14
+    #32 0x556938174dc4 in benchmark::internal::(anonymous namespace)::RunInThread(benchmark::internal::BenchmarkInstance const*, long, int, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) third_party/benchmark/src/benchmark_runner.cc:148:17
+    #33 0x556938175e81 in operator() third_party/benchmark/src/benchmark_runner.cc:336:5
+    #34 0x556938175e81 in __invoke<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #35 0x556938175e81 in __call<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #36 0x556938175e81 in __invoke_r<void, (lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #37 0x556938175e81 in void std::__u::__function::__policy_func<void (int)>::__call_func<benchmark::internal::BenchmarkRunner::DoNIterations()::$_0>(std::__u::__function::__policy_storage const*, int) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #38 0x556938175cfb in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #39 0x556938175cfb in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #40 0x556938175cfb in benchmark::internal::(anonymous namespace)::ThreadRunnerDefault::RunThreads(std::__u::function<void (int)> const&) third_party/benchmark/src/benchmark_runner.cc:207:5
+    #41 0x556938173dbd in benchmark::internal::BenchmarkRunner::DoNIterations() third_party/benchmark/src/benchmark_runner.cc:335:18
+    #42 0x5569381753a3 in benchmark::internal::BenchmarkRunner::DoOneRepetition() third_party/benchmark/src/benchmark_runner.cc:509:9
+    #43 0x5569381611be in RunBenchmarks third_party/benchmark/src/benchmark.cc:484:14
+    #44 0x5569381611be in benchmark::RunSpecifiedBenchmarks(benchmark::BenchmarkReporter*, benchmark::BenchmarkReporter*, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>>) third_party/benchmark/src/benchmark.cc:674:5
+    #45 0x556938160339 in benchmark::RunSpecifiedBenchmarks() third_party/benchmark/src/benchmark.cc:587:10
+    #46 0x5569278a0c83 in main platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:158:3
+    #47 0x7f504689af11 in __libc_start_main (/usr/grte/v5/lib64/libc.so.6+0x61f11) (BuildId: 30449e717b2f9b6206293b5f90426da2)
+    #48 0x556927871be9 in _start /usr/grte/v5/debug-src/src/csu/../sysdeps/x86_64/start.S:120
+
+SUMMARY: UndefinedBehaviorSanitizer: misaligned-pointer-use third_party/slinky/runtime/evaluate.cc:147:47  (//platforms/xla/benchmarks/cpu:hlo_benchmark_test)
+
