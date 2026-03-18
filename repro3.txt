@@ -1,0 +1,73 @@
+diff --git a/google3/third_party/slinky/builder/optimizations.cc b/google3/third_party/slinky/builder/optimizations.cc
+--- a/google3/third_party/slinky/builder/optimizations.cc
++++ b/google3/third_party/slinky/builder/optimizations.cc
+@@ -483,12 +483,17 @@ public:
+           continue;
+         }
+ 
+-        // The alias might have used the bounds of this symbol, substitute them now.
++        // The alias might have used the bounds/stride/fold_factor of this symbol, substitute them now.
++        // We must substitute all dim fields — not just bounds — because make_contiguous_dims
++        // creates strides like buffer_elem_size(op->sym) that reference the buffer being defined.
++        // We pass op->elem_size so that buffer_elem_size(op->sym) is replaced with the concrete value.
+         for (dim_expr& i : alias.dims) {
+-          i.bounds = substitute_buffer(i.bounds, op->sym, op_dims_bounds);
++          i.bounds = substitute_buffer(i.bounds, op->sym, op->elem_size, op_dims_bounds);
++          i.stride = substitute_buffer(i.stride, op->sym, op->elem_size, op_dims_bounds);
++          i.fold_factor = substitute_buffer(i.fold_factor, op->sym, op->elem_size, op_dims_bounds);
+         }
+         for (expr& i : alias.at) {
+-          i = substitute_buffer(i, op->sym, op_dims_bounds);
++          i = substitute_buffer(i, op->sym, op->elem_size, op_dims_bounds);
+         }
+ 
+         var alloc_var = target_var;
+diff --git a/google3/third_party/slinky/builder/test/copy_pipeline.cc b/google3/third_party/slinky/builder/test/copy_pipeline.cc
+--- a/google3/third_party/slinky/builder/test/copy_pipeline.cc
++++ b/google3/third_party/slinky/builder/test/copy_pipeline.cc
+@@ -980,4 +980,45 @@ TEST_P(tile_untile, copy) {
+   }
+ }
+ 
++index_t fake_reduce(const buffer<const float>& in, const buffer<float>& out) { return 0; }
++
++TEST(copy_pipeline, make_buffer_no_forward_refs) {
++  node_context ctx;
++
++  auto in = buffer_expr::make(ctx, "in", 2, sizeof(float));
++  auto out = buffer_expr::make(ctx, "out", 1, sizeof(float));
++
++  auto padded = buffer_expr::make(ctx, "padded", 2, sizeof(float));
++  auto stencil = buffer_expr::make(ctx, "stencil", 3, sizeof(float));
++
++  var x(ctx, "x");
++  var y(ctx, "y");
++  var k(ctx, "k");
++
++  func pad = func::make_copy(
++      {in, {point(x), point(y)}, in->bounds()}, {padded, {x, y}},
++      {buffer_expr::make_scalar<float>(ctx, "pad_val", 0.0f)});
++
++  func stencil_copy = func::make_copy({padded, {point(x), point(y + k - 1)}}, {stencil, {x, y, k}});
++
++  func reduce =
++      func::make(fake_reduce, {{stencil, {point(x), point(y), bounds(0, 2)}}}, {{out, {x}}}, call_stmt::attributes{});
++
++  pipeline p = build_pipeline(ctx, {in}, {out});
++
++  buffer<float, 2> in_buf({10, 10});
++  in_buf.allocate();
++  buffer<float, 1> out_buf({10});
++  out_buf.allocate();
++
++  const raw_buffer* inputs[] = {&in_buf};
++  const raw_buffer* outputs[] = {&out_buf};
++  test_context eval_ctx;
++
++  eval_ctx[padded->sym()] = 0xf1f1f1f1f1f1f1f1;
++  eval_ctx[stencil->sym()] = 0xf1f1f1f1f1f1f1f1;
++
++  p.evaluate(inputs, outputs, eval_ctx);
++}
++
+ }  // namespace slinky
