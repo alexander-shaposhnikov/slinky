@@ -1,0 +1,60 @@
+#include "third_party/slinky/builder/test/context.h"
+#include "third_party/slinky/builder/test/funcs.h"
+#include "third_party/slinky/builder/test/util.h"
+#include "third_party/slinky/builder/pipeline.h"
+#include "testing/base/public/gunit.h"
+
+namespace slinky {
+
+TEST(copy, padding_alias_input_bug) {
+  node_context ctx;
+
+  var x(ctx, "x");
+  var y(ctx, "y");
+  test_context eval_ctx;
+
+  const int W = 10;
+  const int H = 7;
+  buffer<char, 2> in_buf({W - 2, H - 2});
+  init_random(in_buf);
+
+  auto in = buffer_expr::make(ctx, "in", 2, sizeof(char));
+  auto in_bitcast = buffer_expr::make(ctx, "in_bitcast", 2, sizeof(char));
+  auto padded_in = buffer_expr::make(ctx, "padded_in", 2, sizeof(char));
+  auto out = buffer_expr::make(ctx, "out", 2, sizeof(char));
+
+  auto padding = buffer_expr::make(ctx, "padding", 0, sizeof(char));
+
+  // 1. Bitcast: copy `in` to `in_bitcast`.
+  func bitcast = func::make_copy({in, {point(x), point(y)}}, {in_bitcast, {x, y}}, eval_ctx.copy);
+
+  // 2. Padding: copy `in_bitcast` to `padded_in`.
+  func pad = func::make_copy(
+      {in_bitcast, {point(x), point(y)}, in_bitcast->bounds()}, {padded_in, {x, y}}, {padding, {}}, eval_ctx.copy);
+
+  // 3. Out: copy `padded_in` to `out`.
+  func copy_out = func::make_copy({padded_in, {point(x), point(y)}}, {out, {x, y}}, eval_ctx.copy);
+
+  pipeline p = build_pipeline(ctx, {in, padding}, {out});
+
+  buffer<char, 2> out_buf({W, H});
+  out_buf.allocate();
+
+  buffer<char, 0> pad_buf; pad_buf.allocate(); pad_buf(0,0) = 3; const raw_buffer* inputs[] = {&in_buf, &pad_buf};
+  const raw_buffer* outputs[] = {&out_buf};
+
+  // We are checking if it corrupts the input buffer due to bad aliasing.
+  buffer<char, 2> in_buf_copy({W - 2, H - 2});
+  in_buf_copy.allocate();
+  copy(in_buf, in_buf_copy);
+
+  p.evaluate(inputs, outputs, eval_ctx);
+
+  for (int j = 0; j < H - 2; ++j) {
+    for (int i = 0; i < W - 2; ++i) {
+      ASSERT_EQ(in_buf(i, j), in_buf_copy(i, j)) << "Input was corrupted!";
+    }
+  }
+}
+
+}
