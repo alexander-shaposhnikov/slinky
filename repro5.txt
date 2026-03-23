@@ -1,0 +1,301 @@
+shal1t7: comp = %fused_computation.1 (param_0.2: f32[], param_1.3: f32[3,16,7,7,2048]) -> f32[48,2048] {
+  %param_1.3 = f32[3,16,7,7,2048]{4,3,2,1,0} parameter(1)
+  %bitcast.1 = f32[48,49,2048]{2,1,0} bitcast(%param_1.3), metadata={op_name="XlaCallModule/jit(predict_fn_for_head)/DecoderHeadsExportWrapper/ClipFinetuneHead_2/attnpool/convert_element_type"}
+  %param_0.2 = f32[] parameter(0)
+  %reduce-window.0 = f32[48,2,2048]{2,1,0} reduce-window(%bitcast.1, %param_0.2), window={size=1x32x1 stride=1x32x1 pad=0_0x7_8x0_0}, to_apply=%region_16.17
+  ROOT %reduce_sum.0 = f32[48,2048]{1,0} reduce(%reduce-window.0, %param_0.2), dimensions={1}, to_apply=%region_16.17.clone, metadata={op_name="XlaCallModule/jit(predict_fn_for_head)/DecoderHeadsExportWrapper/ClipFinetuneHead_2/attnpool/reduce_sum"}
+}
+
+
+v3/v5#1 = make_buffer(buffer_at(in1), buffer_elem_size(in1), {
+  {[buffer_min(out2, 0), buffer_max(out2, 0)], 4, <>},
+  {[-7, 56], (((buffer_max(out2, 0) - buffer_min(out2, 0)) * 4) + 4), <>},
+  {[buffer_min(out2, 1), buffer_max(out2, 1)], (((buffer_max(out2, 0) - buffer_min(out2, 0)) * 256) + 256), <>}
+}) {
+ v3 = crop_dim(v3/v5#1, 1, [0, 48]) {
+  out2.d2 = loop(parallel, [buffer_min(out2, 1), buffer_max(out2, 1)], 16) {
+   closure {in0, out2, v3, out2.d2, v3/v5#1} in {
+    out2.out2.d2 = crop_dim(out2, 1, [out2.d2, (out2.d2 + 15)]) {
+     v5.out2.d2#1 = make_buffer(buffer_at(v3/v5#1, <>, <>, out2.d2), buffer_elem_size(v3/v5#1), {
+       {[buffer_min(v3/v5#1, 0), buffer_max(v3/v5#1, 0)], buffer_stride(v3/v5#1, 0), buffer_fold_factor(v3/v5#1, 0)},
+       {[0, 63], buffer_stride(v3, 1), buffer_fold_factor(v3/v5#1, 1)},
+       {[out2.d2, buffer_max(out2.out2.d2, 1)], buffer_stride(v3, 2), buffer_fold_factor(v3/v5#1, 2)}
+     }) {
+      v3.out2.d2#1 = make_buffer(buffer_at(v3, buffer_min(out2, 0), <>, buffer_min(out2, 1)), buffer_elem_size(v3), {
+        {[buffer_min(v3, 0), buffer_max(v3, 0)], buffer_stride(v3, 0), buffer_fold_factor(v3, 0)},
+        {[7, 55], buffer_stride(v3, 1), buffer_fold_factor(v3/v5#1, 1)},
+        {[buffer_min(v3, 2), buffer_max(v3, 2)], buffer_stride(v3, 2), buffer_fold_factor(v3, 2)}
+      }) {
+       call(copy, {}, {v3.out2.d2#1, v5.out2.d2#1, in0}, {})
+      }
+      v4 = allocate(automatic, 4, {
+        {[buffer_min(out2, 0), buffer_max(out2, 0)], <>, <>},
+        {[0, 1], <>, <>},
+        {[out2.d2, buffer_max(out2.out2.d2, 1)], <>, <>}
+      }) {
+       v6.out2.d2#1 = make_buffer(buffer_at(v5.out2.d2#1, buffer_min(out2, 0), <>, out2.d2), buffer_elem_size(v5.out2.d2#1), {
+         {[buffer_min(v5.out2.d2#1, 0), buffer_max(v5.out2.d2#1, 0)], buffer_stride(v5.out2.d2#1, 0), buffer_fold_factor(v5.out2.d2#1, 0)},
+         {[0, 31], buffer_stride(v3, 1), buffer_fold_factor(v3/v5#1, 1)},
+         {[0, 1], (buffer_stride(v3, 1) * 32), buffer_fold_factor(v3/v5#1, 1)},
+         {[buffer_min(v5.out2.d2#1, 2), buffer_max(v5.out2.d2#1, 2)], buffer_stride(v5.out2.d2#1, 2), buffer_fold_factor(v5.out2.d2#1, 2)}
+       }) {
+        call(reduce op=reduce_sum axes={1}, {v6.out2.d2#1, in0}, {v4}, {})
+       }
+       call(reduce op=reduce_sum axes={1}, {v4, in0}, {out2.out2.d2}, {})
+      }
+     }
+    }
+   }
+  }
+ }
+}
+=================================================================
+==4155479==ERROR: AddressSanitizer: heap-use-after-free on address 0x7bb955145800 at pc 0x55ff6b49e945 bp 0x7bb9905c4c60 sp 0x7bb9905c4430
+WRITE of size 57344 at 0x7bb955145800 thread T37 (tf_XLAEigen)
+    #0 0x55ff6b49e944 in __asan_memset third_party/llvm/llvm-project/compiler-rt/lib/asan/asan_interceptors_memintrinsics.cpp:69:3
+    #1 0x55ff760ba551 in fill third_party/slinky/runtime/buffer.cc:211:5
+    #2 0x55ff760ba551 in operator() third_party/slinky/runtime/buffer.cc:303:15
+    #3 0x55ff760ba551 in __invoke<const (lambda at third_party/slinky/runtime/buffer.cc:296:13) &, void *, void *> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #4 0x55ff760ba551 in __apply_tuple_impl<const (lambda at third_party/slinky/runtime/buffer.cc:296:13) &, std::__u::tuple<void *, void *>, 0UL, 1UL> third_party/crosstool/v18/stable/src/libcxx/include/tuple:1400:29
+    #5 0x55ff760ba551 in apply<const (lambda at third_party/slinky/runtime/buffer.cc:296:13) &, std::__u::tuple<void *, void *> > third_party/crosstool/v18/stable/src/libcxx/include/tuple:1404:29
+    #6 0x55ff760ba551 in operator() third_party/slinky/runtime/buffer.h:953:7
+    #7 0x55ff760ba551 in void slinky::function_ref<void (void**, long, long const*)>::get_impl<void slinky::for_each_element<slinky::(anonymous namespace)::copy_impl(slinky::raw_buffer&, slinky::raw_buffer&)::$_1, slinky::raw_buffer, slinky::raw_buffer>(slinky::(anonymous namespace)::copy_impl(slinky::raw_buffer&, slinky::raw_buffer&)::$_1 const&, slinky::raw_buffer const&, slinky::raw_buffer const&)::'lambda'(void**, long, long const*)>(slinky::(anonymous namespace)::copy_impl(slinky::raw_buffer&, slinky::raw_buffer&)::$_1 const*, void**, long, long const*) third_party/slinky/base/function_ref.h:17:12
+    #8 0x55ff760bee17 in operator() third_party/slinky/base/function_ref.h:32:47
+    #9 0x55ff760bee17 in call_f third_party/slinky/runtime/buffer.cc:580:3
+    #10 0x55ff760bee17 in void slinky::internal::(anonymous namespace)::for_each_impl_call_f<slinky::function_ref<void (void**, long, long const*)>, 2ul>(slinky::mutable_span<void*, 2ul>, slinky::internal::(anonymous namespace)::for_each_loop<2ul> const*, long) third_party/slinky/runtime/buffer.cc:592:3
+    #11 0x55ff760b52b8 in for_each_impl<false, 2UL, slinky::function_ref<void (void **, long, const long *)> > third_party/slinky/runtime/buffer.cc:826:5
+    #12 0x55ff760b52b8 in void slinky::internal::for_each_element_impl<2ul>(slinky::span<slinky::raw_buffer const*, 2ul>, slinky::function_ref<void (void**, long, long const*)>) third_party/slinky/runtime/buffer.cc:841:3
+    #13 0x55ff760b9ffa in for_each_element<(lambda at third_party/slinky/runtime/buffer.cc:296:13), slinky::raw_buffer, slinky::raw_buffer> third_party/slinky/runtime/buffer.h:951:3
+    #14 0x55ff760b9ffa in slinky::(anonymous namespace)::copy_impl(slinky::raw_buffer&, slinky::raw_buffer&) third_party/slinky/runtime/buffer.cc:295:9
+    #15 0x55ff760b978c in slinky::(anonymous namespace)::pad_impl(slinky::raw_buffer&, slinky::raw_buffer&, slinky::raw_buffer&) third_party/slinky/runtime/buffer.cc:342:7
+    #16 0x55ff760b8a2e in slinky::copy(slinky::raw_buffer const&, slinky::raw_buffer const&, slinky::raw_buffer const&) third_party/slinky/runtime/buffer.cc:391:5
+    #17 0x55ff75abba6b in __invoke<void (*&)(const slinky::raw_buffer &, const slinky::raw_buffer &, const slinky::raw_buffer &), const slinky::raw_buffer &, const slinky::raw_buffer &, const slinky::raw_buffer &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #18 0x55ff75abba6b in __call<void (*&)(const slinky::raw_buffer &, const slinky::raw_buffer &, const slinky::raw_buffer &), const slinky::raw_buffer &, const slinky::raw_buffer &, const slinky::raw_buffer &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #19 0x55ff75abba6b in __invoke_r<void, void (*&)(const slinky::raw_buffer &, const slinky::raw_buffer &, const slinky::raw_buffer &), const slinky::raw_buffer &, const slinky::raw_buffer &, const slinky::raw_buffer &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #20 0x55ff75abba6b in void std::__u::__function::__policy_func<void (slinky::raw_buffer const&, slinky::raw_buffer const&, slinky::raw_buffer const&)>::__call_func<void (*)(slinky::raw_buffer const&, slinky::raw_buffer const&, slinky::raw_buffer const&)>(std::__u::__function::__policy_storage const*, slinky::raw_buffer const&, slinky::raw_buffer const&, slinky::raw_buffer const&) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #21 0x55ff75fdc510 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #22 0x55ff75fdc510 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #23 0x55ff75fdc510 in operator() third_party/slinky/builder/optimizations.cc:1197:9
+    #24 0x55ff75fdc510 in __invoke<(lambda at third_party/slinky/builder/optimizations.cc:1188:7) &, const slinky::call_stmt *, slinky::eval_context &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #25 0x55ff75fdc510 in __call<(lambda at third_party/slinky/builder/optimizations.cc:1188:7) &, const slinky::call_stmt *, slinky::eval_context &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:342:12
+    #26 0x55ff75fdc510 in __invoke_r<long, (lambda at third_party/slinky/builder/optimizations.cc:1188:7) &, const slinky::call_stmt *, slinky::eval_context &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #27 0x55ff75fdc510 in long std::__u::__function::__policy_func<long (slinky::call_stmt const*, slinky::eval_context&)>::__call_func<slinky::implement_copy(slinky::copy_stmt const*, slinky::node_context&)::$_0>(std::__u::__function::__policy_storage const*, slinky::call_stmt const*, slinky::eval_context&) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #28 0x55ff760ce8d0 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #29 0x55ff760ce8d0 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #30 0x55ff760ce8d0 in eval third_party/slinky/runtime/evaluate.cc:567:22
+    #31 0x55ff760ce8d0 in eval third_party/slinky/runtime/evaluate.cc:347:44
+    #32 0x55ff760ce8d0 in eval_with_value third_party/slinky/runtime/evaluate.cc:356:22
+    #33 0x55ff760ce8d0 in slinky::(anonymous namespace)::evaluator::eval(slinky::make_buffer const*) third_party/slinky/runtime/evaluate.cc:640:12
+    #34 0x55ff760cc34f in slinky::(anonymous namespace)::evaluator::eval_non_inlined(slinky::stmt const&) third_party/slinky/runtime/evaluate.cc:369:46
+    #35 0x55ff760cc140 in eval third_party/slinky/runtime/evaluate.cc:349:21
+    #36 0x55ff760cc140 in eval third_party/slinky/runtime/evaluate.cc:407:24
+    #37 0x55ff760cc140 in slinky::(anonymous namespace)::evaluator::eval_non_inlined(slinky::stmt const&) third_party/slinky/runtime/evaluate.cc:366:40
+    #38 0x55ff760ce8f8 in eval third_party/slinky/runtime/evaluate.cc:349:21
+    #39 0x55ff760ce8f8 in eval_with_value third_party/slinky/runtime/evaluate.cc:356:22
+    #40 0x55ff760ce8f8 in slinky::(anonymous namespace)::evaluator::eval(slinky::make_buffer const*) third_party/slinky/runtime/evaluate.cc:640:12
+    #41 0x55ff760cc34f in slinky::(anonymous namespace)::evaluator::eval_non_inlined(slinky::stmt const&) third_party/slinky/runtime/evaluate.cc:369:46
+    #42 0x55ff760cd1a4 in eval third_party/slinky/runtime/evaluate.cc:349:21
+    #43 0x55ff760cd1a4 in eval_with_value third_party/slinky/runtime/evaluate.cc:356:22
+    #44 0x55ff760cd1a4 in slinky::(anonymous namespace)::evaluator::eval_unshadowed(slinky::crop_dim const*) third_party/slinky/runtime/evaluate.cc:734:12
+    #45 0x55ff760c90c8 in eval_maybe_shadowed<slinky::crop_dim> third_party/slinky/runtime/evaluate.cc:739:53
+    #46 0x55ff760c90c8 in eval third_party/slinky/runtime/evaluate.cc:743:45
+    #47 0x55ff760c90c8 in eval third_party/slinky/runtime/evaluate.cc:348:43
+    #48 0x55ff760c90c8 in slinky::evaluate(slinky::stmt const&, slinky::eval_context&) third_party/slinky/runtime/evaluate.cc:870:15
+    #49 0x55ff760d1627 in operator() third_party/slinky/runtime/evaluate.cc:481:28
+    #50 0x55ff760d1627 in __invoke<(lambda at third_party/slinky/runtime/evaluate.cc:472:19) &, unsigned long> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #51 0x55ff760d1627 in __call<(lambda at third_party/slinky/runtime/evaluate.cc:472:19) &, unsigned long> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #52 0x55ff760d1627 in __invoke_r<void, (lambda at third_party/slinky/runtime/evaluate.cc:472:19) &, unsigned long> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #53 0x55ff760d1627 in void std::__u::__function::__policy_func<void (unsigned long)>::__call_func<slinky::(anonymous namespace)::evaluator::eval_loop_parallel(slinky::loop const*, long)::'lambda'(long)>(std::__u::__function::__policy_storage const*, unsigned long) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #54 0x55ff75aac8c9 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #55 0x55ff75aac8c9 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #56 0x55ff75aac8c9 in Run third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:112:7
+    #57 0x55ff75aac8c9 in xla::cpu::SlinkyThreadPool::Impl::WorkOnTask(xla::cpu::(anonymous namespace)::Task*) third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:260:27
+    #58 0x55ff75aac423 in xla::cpu::SlinkyThreadPool::Impl::WorkOnTasks(absl::Condition const&) third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:276:5
+    #59 0x55ff75ab0c6e in void xla::cpu::SlinkyThreadPool::Impl::ScheduleWorkers<true>(xla::cpu::SlinkyThreadPool::Impl::ScheduleState*) third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:349:16
+    #60 0x55ff75ab0aa5 in operator() third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:342:11
+    #61 0x55ff75ab0aa5 in __invoke<(lambda at third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:341:9) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #62 0x55ff75ab0aa5 in __call<(lambda at third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:341:9) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #63 0x55ff75ab0aa5 in __invoke_r<void, (lambda at third_party/tensorflow/compiler/xla/backends/cpu/runtime/ynnpack/slinky_threadpool.cc:341:9) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #64 0x55ff75ab0aa5 in void std::__u::__function::__policy_func<void ()>::__call_func<void xla::cpu::SlinkyThreadPool::Impl::ScheduleWorkers<false>(xla::cpu::SlinkyThreadPool::Impl::ScheduleState*)::'lambda'()>(std::__u::__function::__policy_storage const*) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #65 0x55ff7b54dc88 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #66 0x55ff7b54dc88 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #67 0x55ff7b54dc88 in tsl::thread::EigenEnvironment::ExecuteTask(tsl::thread::EigenEnvironment::Task const&) third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:112:5
+    #68 0x55ff7b54cc86 in Eigen::ThreadPoolTempl<tsl::thread::EigenEnvironment>::WorkerLoop(int) third_party/eigen3/unsupported/Eigen/CXX11/../../../Eigen/src/ThreadPool/NonBlockingThreadPool.h:365:41
+    #69 0x55ff7b54cae4 in operator() third_party/eigen3/unsupported/Eigen/CXX11/../../../Eigen/src/ThreadPool/NonBlockingThreadPool.h:78:68
+    #70 0x55ff7b54cae4 in __invoke<(lambda at ./third_party/eigen3/unsupported/Eigen/CXX11/../../../Eigen/src/ThreadPool/NonBlockingThreadPool.h:78:54) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #71 0x55ff7b54cae4 in __call<(lambda at ./third_party/eigen3/unsupported/Eigen/CXX11/../../../Eigen/src/ThreadPool/NonBlockingThreadPool.h:78:54) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #72 0x55ff7b54cae4 in __invoke_r<void, (lambda at ./third_party/eigen3/unsupported/Eigen/CXX11/../../../Eigen/src/ThreadPool/NonBlockingThreadPool.h:78:54) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #73 0x55ff7b54cae4 in void std::__u::__function::__policy_func<void ()>::__call_func<Eigen::ThreadPoolTempl<tsl::thread::EigenEnvironment>::ThreadPoolTempl(int, bool, tsl::thread::EigenEnvironment)::'lambda'()>(std::__u::__function::__policy_storage const*) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #74 0x55ff7b54ca45 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #75 0x55ff7b54ca45 in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #76 0x55ff7b54ca45 in operator() third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:95:7
+    #77 0x55ff7b54ca45 in std::__u::__invoke_result_impl<void, tsl::thread::EigenEnvironment::CreateThread(std::__u::function<void ()>)::'lambda'()&>::type std::__u::__invoke<tsl::thread::EigenEnvironment::CreateThread(std::__u::function<void ()>)::'lambda'()&>(tsl::thread::EigenEnvironment::CreateThread(std::__u::function<void ()>)::'lambda'()&) third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #78 0x55ff7b54c87a in invoke<(lambda at third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:87:51) &> third_party/crosstool/v18/stable/src/libcxx/include/__functional/invoke.h:29:10
+    #79 0x55ff7b54c87a in InvokeR<void, (lambda at third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:87:51) &> third_party/absl/functional/internal/any_invocable.h:121:5
+    #80 0x55ff7b54c87a in void absl::internal_any_invocable::RemoteInvoker<false, void, tsl::thread::EigenEnvironment::CreateThread(std::__u::function<void ()>)::'lambda'()&>(absl::internal_any_invocable::TypeErasedState*) third_party/absl/functional/internal/any_invocable.h:344:10
+    #81 0x55ff7b537557 in operator() third_party/absl/functional/internal/any_invocable.h:781:1
+    #82 0x55ff7b537557 in operator() third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:265:13
+    #83 0x55ff7b537557 in __invoke<(lambda at third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:262:15) &> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #84 0x55ff7b537557 in invoke<(lambda at third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:262:15) &> third_party/crosstool/v18/stable/src/libcxx/include/__functional/invoke.h:29:10
+    #85 0x55ff7b537557 in InvokeR<void, (lambda at third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:262:15) &> third_party/absl/functional/internal/any_invocable.h:121:5
+    #86 0x55ff7b537557 in void absl::internal_any_invocable::RemoteInvoker<false, void, tsl::(anonymous namespace)::GoogleThread::FuncThread::FuncThread(tsl::ThreadOptions const&, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, absl::AnyInvocable<void ()>)::'lambda'()&>(absl::internal_any_invocable::TypeErasedState*) third_party/absl/functional/internal/any_invocable.h:344:10
+    #87 0x55ff7b53750f in operator() third_party/absl/functional/internal/any_invocable.h:781:1
+    #88 0x55ff7b53750f in tsl::(anonymous namespace)::GoogleThread::FuncThread::Run() third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:268:27
+    #89 0x55ff7d334881 in Thread::ThreadBody(void*) thread/thread.cc:1442:16
+    #90 0x55ff6b49e2f0 in asan_thread_start(void*) third_party/llvm/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:306:28
+    #91 0x7fb9c6c9b0be in start_thread (/usr/grte/v5/lib64/libpthread.so.0+0xc0be) (BuildId: 1418f8d4d945aaf2d22f39ec933b269b)
+
+0x7bb955145800 is located 118784 bytes inside of 19267604-byte region [0x7bb955128800,0x7bb956388814)
+freed by thread T0 here:
+    #0 0x55ff6b4a07a6 in free third_party/llvm/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3
+    #1 0x55ff7b557688 in aligned_free third_party/gloop/base/port.h:630:50
+    #2 0x55ff7b557688 in tsl::port::AlignedFree(void*) third_party/tensorflow/compiler/xla/tsl/platform/google/port.cc:636:42
+    #3 0x55ff7b25c15a in DeallocateBuffers third_party/tensorflow/compiler/xla/literal.cc:652:5
+    #4 0x55ff7b25c15a in operator() third_party/tensorflow/compiler/xla/literal.cc:325:16
+    #5 0x55ff7b25c15a in operator() third_party/tensorflow/compiler/xla/literal.h:1006:20
+    #6 0x55ff7b25c15a in absl::Status xla::LiteralBase::Piece::ForEachMutableHelper<void xla::LiteralBase::Piece::ForEachMutableSubpiece<xla::Literal::DeallocateBuffers()::$_0>(xla::Literal::DeallocateBuffers()::$_0 const&)::'lambda'(xla::ShapeIndex const&, xla::LiteralBase::Piece*)>(xla::Literal::DeallocateBuffers()::$_0 const&, xla::LiteralBase::Piece*, xla::ShapeIndex*) third_party/tensorflow/compiler/xla/literal.h:1221:26
+    #7 0x55ff7b17123a in ForEachMutableSubpiece<(lambda at third_party/tensorflow/compiler/xla/literal.cc:324:7)> third_party/tensorflow/compiler/xla/literal.h:1004:14
+    #8 0x55ff7b17123a in DeallocateBuffers third_party/tensorflow/compiler/xla/literal.cc:323:15
+    #9 0x55ff7b17123a in xla::Literal::~Literal() third_party/tensorflow/compiler/xla/literal.cc:320:23
+    #10 0x55ff6b4e6013 in __destroy_at<xla::Literal> third_party/crosstool/v18/stable/src/libcxx/include/__memory/construct_at.h:67:13
+    #11 0x55ff6b4e6013 in destroy<xla::Literal, 0> third_party/crosstool/v18/stable/src/libcxx/include/__memory/allocator_traits.h:373:5
+    #12 0x55ff6b4e6013 in __base_destruct_at_end third_party/crosstool/v18/stable/src/libcxx/include/__google3/size_based_vector.h:768:7
+    #13 0x55ff6b4e6013 in clear third_party/crosstool/v18/stable/src/libcxx/include/__google3/size_based_vector.h:546:5
+    #14 0x55ff6b4e6013 in std::__u::vector<xla::Literal, std::__u::allocator<xla::Literal>>::__destroy_vector::operator()() third_party/crosstool/v18/stable/src/libcxx/include/__google3/size_based_vector.h:250:16
+    #15 0x55ff6c0f61ad in ~vector third_party/crosstool/v18/stable/src/libcxx/include/__google3/size_based_vector.h:265:67
+    #16 0x55ff6c0f61ad in xla::cpu::RunHloBenchmarkImpl(benchmark::State*, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:212:3
+    #17 0x55ff6c0f4b68 in xla::cpu::RunHloBenchmark(benchmark::State&, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:314:10
+    #18 0x55ff6b4e25c1 in xla::cpu::(anonymous namespace)::RunBenchmark(benchmark::State*, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:90:12
+    #19 0x55ff6b4e6681 in xla::cpu::(anonymous namespace)::BM_HloModule(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:98:12
+    #20 0x55ff6b4e6fe3 in operator() third_party/benchmark/include/benchmark/benchmark.h:1458:41
+    #21 0x55ff6b4e6fe3 in benchmark::internal::LambdaBenchmark<benchmark::Benchmark* benchmark::RegisterBenchmark<void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&>(std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&)::'lambda'(benchmark::State&)>::Run(benchmark::State&) third_party/benchmark/include/benchmark/benchmark.h:1426:34
+    #22 0x55ff7af7a7df in benchmark::internal::BenchmarkInstance::Run(long, int, benchmark::internal::ThreadTimer*, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) const third_party/benchmark/src/benchmark_api_internal.cc:99:14
+    #23 0x55ff7af7d337 in benchmark::internal::(anonymous namespace)::RunInThread(benchmark::internal::BenchmarkInstance const*, long, int, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) third_party/benchmark/src/benchmark_runner.cc:148:17
+    #24 0x55ff7af7f5f2 in operator() third_party/benchmark/src/benchmark_runner.cc:336:5
+    #25 0x55ff7af7f5f2 in __invoke<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #26 0x55ff7af7f5f2 in __call<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #27 0x55ff7af7f5f2 in __invoke_r<void, (lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #28 0x55ff7af7f5f2 in void std::__u::__function::__policy_func<void (int)>::__call_func<benchmark::internal::BenchmarkRunner::DoNIterations()::$_0>(std::__u::__function::__policy_storage const*, int) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #29 0x55ff7af7eb5f in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #30 0x55ff7af7eb5f in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #31 0x55ff7af7eb5f in benchmark::internal::(anonymous namespace)::ThreadRunnerDefault::RunThreads(std::__u::function<void (int)> const&) third_party/benchmark/src/benchmark_runner.cc:207:5
+    #32 0x55ff7af7c00a in benchmark::internal::BenchmarkRunner::DoNIterations() third_party/benchmark/src/benchmark_runner.cc:335:18
+    #33 0x55ff7af7dbf4 in benchmark::internal::BenchmarkRunner::DoOneRepetition() third_party/benchmark/src/benchmark_runner.cc:509:9
+    #34 0x55ff7af6ff3e in RunBenchmarks third_party/benchmark/src/benchmark.cc:484:14
+    #35 0x55ff7af6ff3e in benchmark::RunSpecifiedBenchmarks(benchmark::BenchmarkReporter*, benchmark::BenchmarkReporter*, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>>) third_party/benchmark/src/benchmark.cc:674:5
+    #36 0x55ff7af6eb78 in benchmark::RunSpecifiedBenchmarks() third_party/benchmark/src/benchmark.cc:587:10
+    #37 0x55ff6b4dfceb in main platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:158:3
+    #38 0x7fb9c6b24f11 in __libc_start_main (/usr/grte/v5/lib64/libc.so.6+0x61f11) (BuildId: 30449e717b2f9b6206293b5f90426da2)
+    #39 0x55ff6b3fb4a9 in _start /usr/grte/v5/debug-src/src/csu/../sysdeps/x86_64/start.S:120
+
+previously allocated by thread T0 here:
+    #0 0x55ff6b4a1587 in posix_memalign third_party/llvm/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:162:3
+    #1 0x55ff7b55761a in aligned_malloc third_party/gloop/base/port.h:625:7
+    #2 0x55ff7b55761a in tsl::port::AlignedMalloc(unsigned long, std::align_val_t) third_party/tensorflow/compiler/xla/tsl/platform/google/port.cc:633:10
+    #3 0x55ff7b170a72 in xla::LiteralBase::Piece::AllocateBuffers() third_party/tensorflow/compiler/xla/literal.cc:638:51
+    #4 0x55ff7b170337 in xla::Literal::SetPiece(xla::Shape const&, xla::LiteralBase::Piece*, bool, xla::LiteralBase::ArrayValueState) third_party/tensorflow/compiler/xla/literal.cc:292:33
+    #5 0x55ff7b170eb4 in xla::Literal::Make(xla::Shape const&, bool, xla::LiteralBase::ArrayValueState) third_party/tensorflow/compiler/xla/literal.cc:310:30
+    #6 0x55ff7b16db1e in xla::Literal::Literal(xla::Shape const&, bool, xla::LiteralBase::ArrayValueState) third_party/tensorflow/compiler/xla/literal.cc:317:15
+    #7 0x55ff7b11a41e in xla::MakeFakeLiteral(xla::Shape const&, std::__u::linear_congruential_engine<unsigned long, 16807ul, 0ul, 2147483647ul>*, std::__u::optional<std::__u::pair<long, long>>, bool, bool, bool, std::__u::optional<long>, std::__u::optional<long>, std::__u::optional<unsigned long>, std::__u::function<double (std::__u::linear_congruential_engine<unsigned long, 16807ul, 0ul, 2147483647ul>*)>) third_party/tensorflow/compiler/xla/literal_util.cc:794:11
+    #8 0x55ff771c0244 in CreateLiteralForConstrainedUses third_party/tensorflow/compiler/xla/tests/test_utils.cc:342:12
+    #9 0x55ff771c0244 in MakeConstrainedArgument third_party/tensorflow/compiler/xla/tests/test_utils.cc:359:10
+    #10 0x55ff771c0244 in xla::MakeFakeArguments(xla::HloModule const*, std::__u::linear_congruential_engine<unsigned long, 16807ul, 0ul, 2147483647ul>*, bool, bool, std::__u::optional<long>, bool, std::__u::function<std::__u::optional<unsigned long> (xla::HloInstruction const*, long)>) third_party/tensorflow/compiler/xla/tests/test_utils.cc:415:9
+    #11 0x55ff771bed09 in xla::MakeFakeArguments(xla::HloModule const*, bool, bool, bool, std::__u::optional<long>, std::__u::linear_congruential_engine<unsigned long, 16807ul, 0ul, 2147483647ul>*, bool, std::__u::function<std::__u::optional<unsigned long> (xla::HloInstruction const*, long)>) third_party/tensorflow/compiler/xla/tests/test_utils.cc:382:12
+    #12 0x55ff6c0f59a1 in xla::cpu::RunHloBenchmarkImpl(benchmark::State*, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:203:22
+    #13 0x55ff6c0f4b68 in xla::cpu::RunHloBenchmark(benchmark::State&, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:314:10
+    #14 0x55ff6b4e25c1 in xla::cpu::(anonymous namespace)::RunBenchmark(benchmark::State*, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:90:12
+    #15 0x55ff6b4e6681 in xla::cpu::(anonymous namespace)::BM_HloModule(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:98:12
+    #16 0x55ff6b4e6fe3 in operator() third_party/benchmark/include/benchmark/benchmark.h:1458:41
+    #17 0x55ff6b4e6fe3 in benchmark::internal::LambdaBenchmark<benchmark::Benchmark* benchmark::RegisterBenchmark<void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&>(std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&)::'lambda'(benchmark::State&)>::Run(benchmark::State&) third_party/benchmark/include/benchmark/benchmark.h:1426:34
+    #18 0x55ff7af7a7df in benchmark::internal::BenchmarkInstance::Run(long, int, benchmark::internal::ThreadTimer*, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) const third_party/benchmark/src/benchmark_api_internal.cc:99:14
+    #19 0x55ff7af7d337 in benchmark::internal::(anonymous namespace)::RunInThread(benchmark::internal::BenchmarkInstance const*, long, int, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) third_party/benchmark/src/benchmark_runner.cc:148:17
+    #20 0x55ff7af7f5f2 in operator() third_party/benchmark/src/benchmark_runner.cc:336:5
+    #21 0x55ff7af7f5f2 in __invoke<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #22 0x55ff7af7f5f2 in __call<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #23 0x55ff7af7f5f2 in __invoke_r<void, (lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #24 0x55ff7af7f5f2 in void std::__u::__function::__policy_func<void (int)>::__call_func<benchmark::internal::BenchmarkRunner::DoNIterations()::$_0>(std::__u::__function::__policy_storage const*, int) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #25 0x55ff7af7eb5f in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #26 0x55ff7af7eb5f in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #27 0x55ff7af7eb5f in benchmark::internal::(anonymous namespace)::ThreadRunnerDefault::RunThreads(std::__u::function<void (int)> const&) third_party/benchmark/src/benchmark_runner.cc:207:5
+    #28 0x55ff7af7c00a in benchmark::internal::BenchmarkRunner::DoNIterations() third_party/benchmark/src/benchmark_runner.cc:335:18
+    #29 0x55ff7af7dbf4 in benchmark::internal::BenchmarkRunner::DoOneRepetition() third_party/benchmark/src/benchmark_runner.cc:509:9
+    #30 0x55ff7af6ff3e in RunBenchmarks third_party/benchmark/src/benchmark.cc:484:14
+    #31 0x55ff7af6ff3e in benchmark::RunSpecifiedBenchmarks(benchmark::BenchmarkReporter*, benchmark::BenchmarkReporter*, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>>) third_party/benchmark/src/benchmark.cc:674:5
+    #32 0x55ff7af6eb78 in benchmark::RunSpecifiedBenchmarks() third_party/benchmark/src/benchmark.cc:587:10
+    #33 0x55ff6b4dfceb in main platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:158:3
+    #34 0x7fb9c6b24f11 in __libc_start_main (/usr/grte/v5/lib64/libc.so.6+0x61f11) (BuildId: 30449e717b2f9b6206293b5f90426da2)
+    #35 0x55ff6b3fb4a9 in _start /usr/grte/v5/debug-src/src/csu/../sysdeps/x86_64/start.S:120
+
+Thread T37 (tf_XLAEigen) created by T0 here:
+    #0 0x55ff6b483521 in pthread_create third_party/llvm/llvm-project/compiler-rt/lib/asan/asan_interceptors.cpp:317:3
+    #1 0x55ff7d334015 in Thread::CreatePthread(pthread_attr_t&) thread/thread.cc:534:13
+    #2 0x55ff7d33534f in Thread::Start(absl::SourceLocation) thread/thread.cc:699:3
+    #3 0x55ff7b53639a in GoogleThread third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:240:9
+    #4 0x55ff7b53639a in tsl::(anonymous namespace)::GoogleEnv::StartThread(tsl::ThreadOptions const&, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, absl::AnyInvocable<void ()>) third_party/tensorflow/compiler/xla/tsl/platform/google/env.cc:311:16
+    #5 0x55ff7b54b871 in tsl::thread::EigenEnvironment::CreateThread(std::__u::function<void ()>) third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:87:17
+    #6 0x55ff7b54af82 in Eigen::ThreadPoolTempl<tsl::thread::EigenEnvironment>::ThreadPoolTempl(int, bool, tsl::thread::EigenEnvironment) third_party/eigen3/unsupported/Eigen/CXX11/../../../Eigen/src/ThreadPool/NonBlockingThreadPool.h:78:41
+    #7 0x55ff7b5492a7 in std::__u::unique_ptr<Eigen::ThreadPoolTempl<tsl::thread::EigenEnvironment>, std::__u::default_delete<Eigen::ThreadPoolTempl<tsl::thread::EigenEnvironment>>> std::__u::make_unique<Eigen::ThreadPoolTempl<tsl::thread::EigenEnvironment>, int&, bool&, tsl::thread::EigenEnvironment, 0>(int&, bool&, tsl::thread::EigenEnvironment&&) third_party/crosstool/v18/stable/src/libcxx/include/__memory/unique_ptr.h:756:30
+    #8 0x55ff7b548f26 in tsl::thread::ThreadPool::ThreadPool(tsl::Env*, tsl::ThreadOptions const&, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, int, bool, Eigen::Allocator*) third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:144:7
+    #9 0x55ff7b54913a in tsl::thread::ThreadPool::ThreadPool(tsl::Env*, tsl::ThreadOptions const&, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, int) third_party/tensorflow/compiler/xla/tsl/platform/threadpool.cc:121:7
+    #10 0x55ff6c17ff04 in xla::PjRtCpuClient::PjRtCpuClient(int, std::__u::vector<std::__u::unique_ptr<xla::PjRtCpuDevice, std::__u::default_delete<xla::PjRtCpuDevice>>, std::__u::allocator<std::__u::unique_ptr<xla::PjRtCpuDevice, std::__u::default_delete<xla::PjRtCpuDevice>>>>, std::__u::shared_ptr<xla::CpuDeviceMemory::Allocator>, std::__u::shared_ptr<xla::cpu::CpuCollectives>, unsigned long, bool, std::__u::function<void (xla::HloModuleConfig&)>, int, std::__u::unique_ptr<xla::CpuTopologyDescription, std::__u::default_delete<xla::CpuTopologyDescription>>) third_party/tensorflow/compiler/xla/pjrt/cpu/cpu_client.cc:278:31
+    #11 0x55ff6c17ed12 in xla::GetPjRtCpuClient(xla::CpuClientOptions) third_party/tensorflow/compiler/xla/pjrt/cpu/cpu_client.cc:238:42
+    #12 0x55ff6c17dfdb in xla::GetXlaPjrtCpuClient(xla::CpuClientOptions) third_party/tensorflow/compiler/xla/pjrt/plugin/xla_cpu/xla_cpu_pjrt_client.cc:30:10
+    #13 0x55ff6c0f4f16 in xla::cpu::RunHloBenchmarkImpl(benchmark::State*, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:163:20
+    #14 0x55ff6c0f4b68 in xla::cpu::RunHloBenchmark(benchmark::State&, std::__u::unique_ptr<xla::HloModule, std::__u::default_delete<xla::HloModule>>, absl::Span<xla::Literal const* const>, xla::cpu::HloBenchmarkOptions const&) third_party/tensorflow/compiler/xla/backends/cpu/benchmarks/hlo_benchmark_runner.cc:314:10
+    #15 0x55ff6b4e25c1 in xla::cpu::(anonymous namespace)::RunBenchmark(benchmark::State*, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:90:12
+    #16 0x55ff6b4e6681 in xla::cpu::(anonymous namespace)::BM_HloModule(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>) platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:98:12
+    #17 0x55ff6b4e6fe3 in operator() third_party/benchmark/include/benchmark/benchmark.h:1458:41
+    #18 0x55ff6b4e6fe3 in benchmark::internal::LambdaBenchmark<benchmark::Benchmark* benchmark::RegisterBenchmark<void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&>(std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&, void (&)(benchmark::State&, std::__u::basic_string_view<char, std::__u::char_traits<char>>), std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>> const&)::'lambda'(benchmark::State&)>::Run(benchmark::State&) third_party/benchmark/include/benchmark/benchmark.h:1426:34
+    #19 0x55ff7af7a7df in benchmark::internal::BenchmarkInstance::Run(long, int, benchmark::internal::ThreadTimer*, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) const third_party/benchmark/src/benchmark_api_internal.cc:99:14
+    #20 0x55ff7af7d337 in benchmark::internal::(anonymous namespace)::RunInThread(benchmark::internal::BenchmarkInstance const*, long, int, benchmark::internal::ThreadManager*, benchmark::internal::PerfCountersMeasurement*, benchmark::ProfilerManager*) third_party/benchmark/src/benchmark_runner.cc:148:17
+    #21 0x55ff7af7f5f2 in operator() third_party/benchmark/src/benchmark_runner.cc:336:5
+    #22 0x55ff7af7f5f2 in __invoke<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:90:27
+    #23 0x55ff7af7f5f2 in __call<(lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:350:5
+    #24 0x55ff7af7f5f2 in __invoke_r<void, (lambda at third_party/benchmark/src/benchmark_runner.cc:335:29) &, int> third_party/crosstool/v18/stable/src/libcxx/include/__type_traits/invoke.h:356:10
+    #25 0x55ff7af7f5f2 in void std::__u::__function::__policy_func<void (int)>::__call_func<benchmark::internal::BenchmarkRunner::DoNIterations()::$_0>(std::__u::__function::__policy_storage const*, int) third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:443:12
+    #26 0x55ff7af7eb5f in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:502:12
+    #27 0x55ff7af7eb5f in operator() third_party/crosstool/v18/stable/src/libcxx/include/__functional/function.h:754:10
+    #28 0x55ff7af7eb5f in benchmark::internal::(anonymous namespace)::ThreadRunnerDefault::RunThreads(std::__u::function<void (int)> const&) third_party/benchmark/src/benchmark_runner.cc:207:5
+    #29 0x55ff7af7c00a in benchmark::internal::BenchmarkRunner::DoNIterations() third_party/benchmark/src/benchmark_runner.cc:335:18
+    #30 0x55ff7af7dbf4 in benchmark::internal::BenchmarkRunner::DoOneRepetition() third_party/benchmark/src/benchmark_runner.cc:509:9
+    #31 0x55ff7af6ff3e in RunBenchmarks third_party/benchmark/src/benchmark.cc:484:14
+    #32 0x55ff7af6ff3e in benchmark::RunSpecifiedBenchmarks(benchmark::BenchmarkReporter*, benchmark::BenchmarkReporter*, std::__u::basic_string<char, std::__u::char_traits<char>, std::__u::allocator<char>>) third_party/benchmark/src/benchmark.cc:674:5
+    #33 0x55ff7af6eb78 in benchmark::RunSpecifiedBenchmarks() third_party/benchmark/src/benchmark.cc:587:10
+    #34 0x55ff6b4dfceb in main platforms/xla/benchmarks/cpu/hlo_benchmark_test.cc:158:3
+    #35 0x7fb9c6b24f11 in __libc_start_main (/usr/grte/v5/lib64/libc.so.6+0x61f11) (BuildId: 30449e717b2f9b6206293b5f90426da2)
+    #36 0x55ff6b3fb4a9 in _start /usr/grte/v5/debug-src/src/csu/../sysdeps/x86_64/start.S:120
+
+SUMMARY: AddressSanitizer: heap-use-after-free third_party/slinky/runtime/buffer.cc:211:5 in fill (//platforms/xla/benchmarks/cpu:hlo_benchmark_test)
+Shadow bytes around the buggy address:
+  0x7bb955145580: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145600: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145680: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145700: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145780: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+=>0x7bb955145800:[fd]fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145880: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145900: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145980: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145a00: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+  0x7bb955145a80: fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd fd
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==4155479==ABORTING
+
